@@ -5,10 +5,7 @@
 **Carrera:** Informática, Facultad de Ciencias Puras y Naturales, Universidad Mayor de San Andrés (UMSA)
 **Mención:** Desarrollo de Sistemas
 **Modalidad:** Individual
- 
-**Página web pública:** `PEGAR_AQUI_EL_ENLACE_PUBLICO`
-**Repositorio:** `PEGAR_AQUI_EL_ENLACE_DEL_REPOSITORIO`
- 
+
 ---
  
 ## 1. Descripción
