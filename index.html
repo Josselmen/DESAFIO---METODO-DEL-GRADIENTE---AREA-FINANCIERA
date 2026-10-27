@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gradientes Conjugados Precondicionado · Presupuesto de un proyecto de software</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+color-scheme:light;--bg:#ffffff;--card:#ffffff;--ink:#0d1722;--mut:#34475a;--line:#b9cad8;--ac:#0b5f73;--ac2:#e3f1f6;--ok:#2e8b57;--bad:#c0392b;--warn:#fff4dc}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Source Serif 4",Georgia,serif}
+h1,h2,h3,.sans,button,input,select,th{font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+header{background:linear-gradient(120deg,#d8eef3,#eaf4e8);color:#17323f;padding:40px 20px 30px;border-bottom:1px solid var(--line)}
+.w{max-width:980px;margin:0 auto}
+h1{font-size:clamp(1.6rem,4vw,2.4rem);line-height:1.2;margin:0 0 10px}
+h2{font-size:1.4rem;margin:0 0 12px;color:var(--ac)}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px;margin:18px auto;max-width:980px}
+.meta{font-family:"Trebuchet MS",sans-serif;font-size:.95rem}.meta b{display:inline-block;min-width:110px}
+.tbl{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:center;vertical-align:top}th{background:var(--ac2)}td.l,th.l{text-align:left}
+input,select{font-size:.9rem;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:78px}
+select{width:auto}
+button{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:8px 14px;margin:3px;cursor:pointer;font-size:.9rem}
+button.o{background:var(--ac2);color:var(--ac);border:1px solid var(--ac)}button:focus-visible,input:focus-visible{outline:3px solid #f0b429}
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}.pill{padding:2px 9px;border-radius:12px;font-size:.8rem;font-family:sans-serif}
+.ok{background:#dcf2e4;color:#17603a}.no{background:#f9dcd8;color:#8e2418}.alert{background:var(--warn);border-left:4px solid #e0a100;padding:10px 14px;border-radius:6px;margin:10px 0}
+.err{background:#f9dcd8;color:#8e2418;border-left-color:var(--bad)}
+.f{font-family:Cambria,Georgia,serif;font-style:italic}code{background:var(--ac2);padding:1px 5px;border-radius:4px}
+svg{max-width:100%;height:auto}.small{font-size:.85rem;color:var(--mut)}
+</style>
+</head>
+<body>
+<header><div class="w">
+<h1>Método de Gradientes Conjugados Precondicionado aplicado al presupuesto de un proyecto de software</h1>
+<div class="meta">
+<div><b>Universitario:</b> Josué David Monasterios Calizaya</div>
+<div><b>Materia:</b> Métodos Numéricos</div>
+<div><b>Carrera:</b> Informática · Facultad de Ciencias Puras y Naturales · UMSA</div>
+<div><b>Mención:</b> Desarrollo de Sistemas (simulador de ajustes presupuestarios, n = 4)</div>
+</div>
+<p>Se modela el reajuste del presupuesto de un proyecto de software en cuatro categorías como el sistema simétrico definido positivo <span class="f">Ax = b</span>, y se resuelve con Cholesky (referencia), GC simple y GCP (Suñagua, 2020), en tres escenarios. Todo se recalcula al editar los datos.</p>
+</div></header>
+
+<section id="caso"><h2>1. Caso de estudio y formulación</h2>
+<p>Una empresa de software planifica un proyecto con presupuesto en miles de USD. Cada categoría compite por recursos compartidos (personal, nube, tiempo del calendario). El desvío óptimo de cada categoría respecto de su línea base se obtiene minimizando el costo cuadrático <span class="f">f(x) = ½ xᵀAx − bᵀx</span>, cuyo mínimo cumple <span class="f">Ax = b</span>. Esto exige A simétrica y definida positiva (SPD).</p>
+<p><b>Variables (miles de USD asignados):</b> x₁ = Desarrollo (backend y frontend), x₂ = Pruebas y QA, x₃ = Infraestructura cloud, x₄ = Seguridad y DevOps.</p>
+<p><b>Coeficientes:</b> a<sub>ii</sub> es el peso de costo propio de la categoría i (mayor valor = el costo crece más rápido al asignar). a<sub>ij</sub> = a<sub>ji</sub> es el acoplamiento por recursos compartidos entre i y j (por ejemplo QA depende de Desarrollo e Infraestructura). b<sub>i</sub> es la demanda presupuestaria objetivo de la categoría i según el plan del proyecto.</p>
+<p class="small">Los datos son un modelo ilustrativo construido para el desafío, no datos reales de una empresa; los pesos se justifican por la estructura típica de dependencias entre áreas de un proyecto de software.</p>
+</section>
+
+<section id="entrada"><h2>2. Entrada de datos y escenarios</h2>
+<div class="row noprint">
+<button onclick="load('ideal')">Ideal</button><button onclick="load('estres')">Bajo estrés</button><button onclick="load('mal')">Mal condicionado</button>
+<span class="small">Escenario activo: <b id="act"></b></span>
+</div>
+<p id="just" class="small"></p>
+<div class="tbl"><table id="inp"></table></div>
+<div class="row" style="margin-top:10px">
+<label>Tolerancia <input id="tol" value="1e-6" style="width:80px"></label>
+<label>Iter. máx. <input id="mx" value="200" style="width:60px"></label>
+<label>Precondicionador <select id="pc"><option value="j">Jacobi (diagonal)</option><option value="s">SSOR (ω = 1)</option></select></label>
+<span class="small">x₀ editable en la tabla. Si pones una matriz no simétrica o no definida positiva, el sistema avisa y no calcula.</span>
+</div>
+<div id="val"></div>
+</section>
+
+<section id="res"><h2>3. Verificación SPD, solución de referencia, GCP vs GC y errores</h2><div id="out"></div></section>
+
+<section id="qa"><h2>4. Módulo de pruebas (QA)</h2>
+<button class="noprint" onclick="runQA()">Ejecutar pruebas</button>
+<div class="tbl"><table id="qat"><tr><th>Prueba</th><th>Entrada</th><th>Esperado</th><th>Obtenido</th><th>Conclusión</th></tr></table></div></section>
+
+<section id="fin"><h2>5. Tabla comparativa final de los tres escenarios</h2>
+<p class="small">Resultados de cada método (Cholesky de referencia, GCP y GC simple) para los tres escenarios, en miles de USD.</p>
+<div class="tbl"><table id="comp"></table></div></section>
+
+<section id="conc"><h2>6. Conclusiones y referencias</h2><div id="concl"></div>
+<p><b>Referencias:</b> Suñagua S., P. (2020). Método de Gradientes Conjugados Precondicionado. <i>Revista Boliviana de Matemática – UMSA</i>, 04, 2–7. · Golub, G. H. y Van Loan, C. F. (2013). <i>Matrix Computations</i> (4.ª ed.). Johns Hopkins. · Saad, Y. (2003). <i>Iterative Methods for Sparse Linear Systems</i> (2.ª ed.). SIAM.</p></section>
+
+<script>
+const N=4,V=['x₁ Desarrollo','x₂ QA','x₃ Infra cloud','x₄ Seguridad/DevOps'];
+const B0=[[4,1,0,0],[1,5,1,0],[0,1,4,1],[0,0,1,3]],D=[1,10,100,30];
+const SC={
+ideal:{t:'Ideal',A:B0.map(r=>r.slice()),b:[20,15,12,8],x0:[0,0,0,0],j:'Presupuesto estable: pesos similares entre categorías (diagonal dominante) y acoplamientos moderados. κ(A) bajo.',
+ i:'Sistema equilibrado: el presupuesto se reparte con asignaciones del mismo orden y el método converge en pocas iteraciones.'},
+estres:{t:'Bajo estrés',A:[[4,1,0,0],[1,6,1,0],[0,1,4,1],[0,0,1,3]],b:[24,18,14.4,9.6],x0:[0,0,0,0],j:'Inflación del 20 % en las demandas b y mayor peso de QA (a₂₂: 5 → 6) por más exigencia de calidad.',
+ i:'La inflación desplaza el punto de equilibrio (las asignaciones suben) pero casi no cambia el condicionamiento: el algoritmo responde igual.'},
+mal:{t:'Mal condicionado',A:B0.map((r,i)=>r.map((v,j)=>v*D[i]*D[j])),b:[20,150,1200,240],x0:[0,0,0,0],j:'Mal escalamiento: las categorías se miden en unidades muy distintas (A = D·B·D con D = diag(1, 10, 100, 30)), por ejemplo horas, USD y servidores mezclados.',
+ i:'El mal escalamiento diagonal infla κ(A); el precondicionador de Jacobi lo corrige y reduce las iteraciones del GCP.'}};
+let cur='ideal',S={};for(const k in SC)S[k]=JSON.parse(JSON.stringify(SC[k]));
+// ---- álgebra ----
+const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),nrm=a=>Math.sqrt(dot(a,a)),mv=(A,x)=>A.map(r=>dot(r,x));
+const mm=(A,B)=>A.map(r=>B[0].map((_,j)=>r.reduce((s,v,k)=>s+v*B[k][j],0)));
+const tr=A=>A[0].map((_,j)=>A.map(r=>r[j]));
+function chol(A){const n=A.length,L=A.map(r=>r.map(()=>0));for(let i=0;i<n;i++)for(let j=0;j<=i;j++){let s=A[i][j];for(let k=0;k<j;k++)s-=L[i][k]*L[j][k];if(i==j){if(s<=1e-14*Math.abs(A[i][i])||s<=0)return null;L[i][i]=Math.sqrt(s)}else L[i][j]=s/L[j][j]}return L}
+const fs=(L,b)=>{const y=[];for(let i=0;i<b.length;i++){let s=b[i];for(let k=0;k<i;k++)s-=L[i][k]*y[k];y[i]=s/L[i][i]}return y};
+const bs=(L,y)=>{const n=y.length,x=[];for(let i=n-1;i>=0;i--){let s=y[i];for(let k=i+1;k<n;k++)s-=L[k][i]*x[k];x[i]=s/L[i][i]}return x};
+const cs=(L,b)=>bs(L,fs(L,b));
+function det(M){M=M.map(r=>r.slice());let d=1;const n=M.length;for(let i=0;i<n;i++){let p=i;for(let r=i+1;r<n;r++)if(Math.abs(M[r][i])>Math.abs(M[p][i]))p=r;if(Math.abs(M[p][i])<1e-300)return 0;if(p!=i){[M[p],M[i]]=[M[i],M[p]];d=-d}d*=M[i][i];for(let r=i+1;r<n;r++){const f=M[r][i]/M[i][i];for(let c=i;c<n;c++)M[r][c]-=f*M[i][c]}}return d}
+function eig(A){const n=A.length;A=A.map(r=>r.slice());for(let s=0;s<60;s++){let off=0;for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)off+=A[i][j]**2;if(off<1e-26)break;for(let p=0;p<n;p++)for(let q=p+1;q<n;q++){if(Math.abs(A[p][q])<1e-300)continue;const th=(A[q][q]-A[p][p])/(2*A[p][q]),t=Math.sign(th||1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),s2=t*c;for(let k=0;k<n;k++){const a=A[k][p],b=A[k][q];A[k][p]=c*a-s2*b;A[k][q]=s2*a+c*b}for(let k=0;k<n;k++){const a=A[p][k],b=A[q][k];A[p][k]=c*a-s2*b;A[q][k]=s2*a+c*b}}}return A.map((r,i)=>r[i]).sort((a,b)=>a-b)}
+function precM(A,t){const n=A.length;if(t=='j')return A.map((r,i)=>r.map((_,j)=>i==j?A[i][i]:0));
+ const Dm=A.map((r,i)=>r.map((_,j)=>i==j?A[i][i]:0)),Di=A.map((r,i)=>r.map((_,j)=>i==j?1/A[i][i]:0)),DL=A.map((r,i)=>r.map((v,j)=>j<=i?v:0));
+ return mm(mm(DL,Di),tr(DL))}
+function cg(A,b,x0,tol,mx,Lm){let x=x0.slice(),r=b.map((v,i)=>v-mv(A,x)[i]),nb=nrm(b)||1,z=Lm?cs(Lm,r):r.slice(),p=z.slice(),rz=dot(r,z),h=[nrm(r)/nb],k=0;
+ while(h[h.length-1]>=tol&&k<mx){const Ap=mv(A,p),a=rz/dot(p,Ap);x=x.map((v,i)=>v+a*p[i]);r=r.map((v,i)=>v-a*Ap[i]);h.push(nrm(r)/nb);k++;z=Lm?cs(Lm,r):r.slice();const rn=dot(r,z);p=z.map((v,i)=>v+(rn/rz)*p[i]);rz=rn}
+ return{x,k,h,conv:h[h.length-1]<tol}}
+function analyze(s,tol,mx,pt){const A=s.A,b=s.b,o={};
+ o.sym=A.every((r,i)=>r.every((v,j)=>Math.abs(v-A[j][i])<=1e-12*Math.max(1,Math.abs(v))));
+ if(!o.sym){o.err='La matriz A no es simétrica (A ≠ Aᵀ).';return o}
+ o.minors=[1,2,3,4].map(k=>det(A.slice(0,k).map(r=>r.slice(0,k))));
+ o.eigs=eig(A);o.spd=o.minors.every(m=>m>0)&&o.eigs[0]>0;
+ if(!o.spd){o.err='La matriz A no es definida positiva (hay menores principales o autovalores ≤ 0).';return o}
+ o.kA=o.eigs[N-1]/o.eigs[0];const L=chol(A);o.ref=cs(L,b);
+ const M=precM(A,pt),Lm=chol(M);const Y=tr(A.map((_,j)=>fs(Lm,A.map(r=>r[j])))),C=A.map((_,j)=>fs(Lm,Y[j]));
+ const C2=C.map((r,i)=>r.map((v,j)=>(v+C[j][i])/2));const e2=eig(C2);o.kM=e2[N-1]/e2[0];
+ o.gc=cg(A,b,s.x0,tol,mx,null);o.gcp=cg(A,b,s.x0,tol,mx,Lm);
+ o.ea=o.ref.map((v,i)=>Math.abs(v-o.gcp.x[i]));o.er=o.ea.map((e,i)=>o.ref[i]==0?null:e/Math.abs(o.ref[i]));o.ep=o.er.map(v=>v==null?null:v*100);
+ o.res=nrm(b.map((v,i)=>v-mv(A,o.gcp.x)[i]))/(nrm(b)||1);return o}
+// ---- formato ----
+const f=v=>v==null?'n/d':(v===0?'0':(Math.abs(v)<1e-3||Math.abs(v)>=1e6?v.toExponential(3):(+v.toPrecision(7)).toString()));
+const vec=a=>'['+a.map(f).join('; ')+']';
+const $=id=>document.getElementById(id);
+const opts=()=>({tol:parseFloat($('tol').value)||1e-6,mx:parseInt($('mx').value)||200,pt:$('pc').value});
+// ---- interfaz ----
+function buildInp(){const s=S[cur];let h='<tr><th></th>'+V.map(v=>'<th>'+v+'</th>').join('')+'<th>b</th><th>x₀</th></tr>';
+ for(let i=0;i<N;i++){h+='<tr><th class="l">Fila '+(i+1)+'</th>';for(let j=0;j<N;j++)h+='<td><input data-t="A" data-i="'+i+'" data-j="'+j+'" value="'+s.A[i][j]+'"></td>';h+='<td><input data-t="b" data-i="'+i+'" value="'+s.b[i]+'"></td><td><input data-t="x" data-i="'+i+'" value="'+s.x0[i]+'"></td></tr>'}
+ $('inp').innerHTML=h;$('act').textContent=s.t;$('just').textContent=s.j;
+ $('inp').querySelectorAll('input').forEach(e=>e.addEventListener('input',()=>{const v=parseFloat(e.value.replace(',','.')),i=+e.dataset.i;if(isNaN(v))return;if(e.dataset.t=='A')s.A[i][+e.dataset.j]=v;else if(e.dataset.t=='b')s.b[i]=v;else s.x0[i]=v;render()}))}
+function load(k){cur=k;S[k]=JSON.parse(JSON.stringify(SC[k]));buildInp();render()}
+function chart(gc,gcp){const W=560,H=220,m=40,all=gc.concat(gcp).filter(v=>v>0),lo=Math.floor(Math.log10(Math.min(...all,1e-8))),hi=1,mxk=Math.max(gc.length,gcp.length,2)-1;
+ const px=k=>m+(W-m-10)*k/mxk,py=v=>10+(H-m-10)*(hi-Math.log10(Math.max(v,10**lo)))/(hi-lo);
+ const pl=(a,c)=>'<polyline fill="none" stroke="'+c+'" stroke-width="2" points="'+a.map((v,k)=>px(k)+','+py(v)).join(' ')+'"/>';
+ let g='';for(let e=lo;e<=hi;e+=Math.max(1,Math.ceil((hi-lo)/6)))g+='<line x1="'+m+'" x2="'+(W-10)+'" y1="'+py(10**e)+'" y2="'+py(10**e)+'" stroke="#9db" stroke-opacity=".4"/><text x="2" y="'+(py(10**e)+4)+'" font-size="10" fill="currentColor">1e'+e+'</text>';
+ return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Convergencia del residuo relativo">'+g+pl(gc,'#d9822b')+pl(gcp,'#1f7a8c')+'<text x="'+m+'" y="'+(H-8)+'" font-size="11" fill="currentColor">iteración (0 a '+mxk+') · naranja: GC simple · azul: GCP · eje: residuo relativo (log)</text></svg>'}
+function render(){const s=S[cur],{tol,mx,pt}=opts(),o=analyze(s,tol,mx,pt);
+ if(o.err){$('val').innerHTML='<div class="alert err sans"><b>Entrada no válida:</b> '+o.err+' Corrige los coeficientes para continuar.</div>';$('out').innerHTML='<p class="small">Sin resultados: los datos actuales no cumplen las propiedades SPD.</p>';return}
+ $('val').innerHTML='<div class="alert sans">A es simétrica (A = Aᵀ) y definida positiva. Menores principales de Sylvester: '+o.minors.map(f).join(' ; ')+' (todos &gt; 0). Autovalores: '+o.eigs.map(f).join(' ; ')+'.</div>';
+ let h='<div class="tbl"><table><tr><th>Variable</th><th>Referencia (Cholesky)</th><th>GCP</th><th>GC simple</th><th>E. absoluto</th><th>E. relativo</th><th>E. porcentual</th></tr>';
+ for(let i=0;i<N;i++)h+='<tr><td class="l">'+V[i]+'</td><td>'+f(o.ref[i])+'</td><td>'+f(o.gcp.x[i])+'</td><td>'+f(o.gc.x[i])+'</td><td>'+f(o.ea[i])+'</td><td>'+(o.er[i]==null?'no definido':f(o.er[i]))+'</td><td>'+(o.ep[i]==null?'no definido':f(o.ep[i])+' %')+'</td></tr>';
+ h+='</table></div><p class="sans"><b>Iteraciones:</b> GC simple = '+o.gc.k+' ('+(o.gc.conv?'convergió':'no convergió')+') · GCP = '+o.gcp.k+' ('+(o.gcp.conv?'convergió':'no convergió')+') · <b>Residuo relativo GCP:</b> '+f(o.res)+'<br><b>κ(A)</b> = '+f(o.kA)+' · <b>κ(M⁻¹A)</b> = '+f(o.kM)+' ('+(pt=='j'?'Jacobi':'SSOR')+')</p>'+chart(o.gc.h,o.gcp.h)+
+ '<p class="small">Algoritmo GCP (Suñagua, 2020): r₀ = b − Ax₀; resolver Mz = r; p₀ = z₀; α<sub>k</sub> = r<sub>k</sub>ᵀz<sub>k</sub> / p<sub>k</sub>ᵀAp<sub>k</sub>; x<sub>k+1</sub> = x<sub>k</sub> + α<sub>k</sub>p<sub>k</sub>; r<sub>k+1</sub> = r<sub>k</sub> − α<sub>k</sub>Ap<sub>k</sub>; β<sub>k</sub> = r<sub>k+1</sub>ᵀz<sub>k+1</sub> / r<sub>k</sub>ᵀz<sub>k</sub>; p<sub>k+1</sub> = z<sub>k+1</sub> + β<sub>k</sub>p<sub>k</sub>. Parada: ‖r‖/‖b‖ &lt; tol.</p>';
+ $('out').innerHTML=h;final()}
+function final(){const {tol,mx,pt}=opts(),ks=['ideal','estres','mal'],R=ks.map(k=>analyze(S[k],tol,mx,pt));
+ const row=(n,fn)=>'<tr><th class="l">'+n+'</th>'+R.map((o,i)=>'<td'+(n=='Interpretación financiera'?' class="l"':'')+'>'+(o.err?'<span class="pill no">dato inválido</span>':fn(o,i))+'</td>').join('')+'</tr>';
+ $('comp').innerHTML='<tr><th>Escenario</th><th>Variable</th><th>Referencia (Cholesky)</th><th>GCP</th><th>GC simple</th></tr>'+R.map((o,i)=>o.err?'<tr><td class="l"><b>'+SC[ks[i]].t+'</b></td><td colspan="4">dato inválido</td></tr>':V.map((v,j)=>'<tr>'+(j==0?'<td class="l" rowspan="4"><b>'+SC[ks[i]].t+'</b></td>':'')+'<td class="l">'+v+'</td><td>'+f(o.ref[j])+'</td><td>'+f(o.gcp.x[j])+'</td><td>'+f(o.gc.x[j])+'</td></tr>').join('')).join('');
+ const g=R.map(o=>o.err?'':o.gc.k+'→'+o.gcp.k);
+ $('concl').innerHTML='<p>Con los datos vigentes, las iteraciones GC → GCP son: ideal '+g[0]+', estrés '+g[1]+', mal condicionado '+g[2]+'. En el escenario ideal el precondicionador aporta poco porque A ya está bien escalada; el estrés financiero desplaza la solución (más presupuesto requerido) sin cambiar de forma relevante κ(A); y en el escenario mal escalado κ(A) es muy grande, el GC simple necesita más iteraciones, y Jacobi reduce κ(M⁻¹A) y acelera la convergencia. Todas las soluciones del GCP coinciden con la de Cholesky dentro de la tolerancia 10⁻⁶.</p><p>Interpretación para el proyecto: la categoría con mayor asignación es la que más presiona el presupuesto, y un mal escalamiento de unidades entre áreas no cambia el resultado financiero, solo la dificultad numérica de obtenerlo, por lo que un simulador debe normalizar o precondicionar antes de resolver.</p>'}
+function runQA(){const t=$('qat');t.innerHTML='<tr><th>Prueba</th><th>Entrada</th><th>Esperado</th><th>Obtenido</th><th>Conclusión</th></tr>';const {tol,mx,pt}=opts();
+ const add=(n,i,e,o,ok)=>t.insertAdjacentHTML('beforeend','<tr><td class="l">'+n+'</td><td class="l">'+i+'</td><td class="l">'+e+'</td><td class="l">'+o+'</td><td><span class="pill '+(ok?'ok">Aprobada':'no">Fallida')+'</span></td></tr>');
+ let rs=['ideal','estres','mal'].map(k=>analyze(SC[k],tol,mx,pt)),ok1=rs.every(o=>!o.err&&o.gcp.conv&&Math.max(...o.ea)<1e-4);
+ add('1. Carga de escenarios','Ideal, Bajo estrés, Mal condicionado','Los 3 convergen y GCP ≈ referencia','Convergen: '+rs.map(o=>o.err?'no':o.gcp.k+' it').join(', ')+'; error máx. '+f(Math.max(...rs.map(o=>Math.max(...o.ea)))),ok1);
+ const ns=JSON.parse(JSON.stringify(SC.ideal));ns.A[0][1]=3;let a=analyze(ns,tol,mx,pt);
+ add('2a. Matriz no simétrica','a₁₂ = 3, a₂₁ = 1','Mensaje de error sin colapsar','"'+(a.err||'sin error')+'"',!!a.err&&!a.sym);
+ const np=JSON.parse(JSON.stringify(SC.ideal));np.A[0][1]=np.A[1][0]=5;a=analyze(np,tol,mx,pt);
+ add('2b. Matriz simétrica no definida positiva','a₁₂ = a₂₁ = 5 (menor 2×2 = 4·5 − 25 &lt; 0)','Mensaje de error sin colapsar','"'+(a.err||'sin error')+'"',!!a.err&&a.sym);
+ const ed=JSON.parse(JSON.stringify(SC.ideal)),r0=analyze(ed,tol,mx,pt);ed.b[0]=40;ed.A[2][2]=6;const r1=analyze(ed,tol,mx,pt);
+ add('3. Edición dinámica','b₁: 20 → 40 y a₃₃: 4 → 6','Cambia la referencia y GCP la sigue (residuo &lt; tol)','x₁ pasó de '+f(r0.ref[0])+' a '+f(r1.ref[0])+'; residuo '+f(r1.res),!r1.err&&Math.abs(r1.ref[0]-r0.ref[0])>1e-6&&r1.res<tol);
+ const m=rs[2];add('4. Comparativa de precondicionamiento','Escenario mal condicionado','Iteraciones GCP ≤ GC','GC = '+m.gc.k+', GCP = '+m.gcp.k+'; κ(A) = '+f(m.kA)+', κ(M⁻¹A) = '+f(m.kM),!m.err&&m.gcp.k<=m.gc.k)}
+['tol','mx','pc'].forEach(i=>$(i).addEventListener('input',render));
+buildInp();render();runQA();
+</script>
+</body>
+</html>
